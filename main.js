@@ -106,6 +106,11 @@ let bullets = [];            // {id, x, y, px, py, dx, dy, traveled}
 let nextBulletId = 1;
 
 let gold = 10;
+// ===== Upgrade Costs =====
+let upgradeCostDmg = 20;
+let upgradeCostSpeed = 25;
+let upgradeCostRange = 30;
+let upgradeCostBullet = 35;
 
 let gameSpeed = 4.0; // 1배속
 
@@ -328,6 +333,7 @@ startBtn.addEventListener("click", () => {
     last = performance.now();
     requestAnimationFrame(loop);
     applyWave(1);
+    updateUpgradeUI();
 });
 
 /* 업데이트 (패닝은 이벤트에서 카메라를 직접 바꾸므로 비워둠) */
@@ -396,7 +402,7 @@ function renderWorld() {
         ctx.strokeStyle = "#00ffcc";
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(sel.x, sel.y, range_radius, 0, Math.PI * 2);
+        ctx.arc(sel.x, sel.y, sel.range, 0, Math.PI * 2);
         ctx.stroke();
 
         ctx.globalAlpha = 0.08;
@@ -584,6 +590,48 @@ function renderToast() {
     ctx.restore();
 }
 
+function renderSelectedTowerInfo() {
+    const t = getSelectedTower();
+
+    const pad = 16;
+    const x = viewW - pad;  // 오른쪽 기준
+    const y = 26;
+
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+
+    if (!t) {
+        ctx.fillText("No tower selected", x, y);
+        ctx.restore();
+        return;
+    }
+
+    // ✅ 출력 내용(원하는 항목 더 추가 가능)
+    const lines = [
+        `Tower #${t.id}`,
+        `DMG: ${t.dmg}`,
+        `FireSpeed: ${t.fireEvery.toFixed(2)}s`,
+        `Range: ${Math.round(t.range)}`,
+        `BulletSpeed: ${Math.round(t.bulletSpeed)}`,
+        `Upgrade Costs`,
+        `  Damage: ${t.costDmg}`,
+        `  FireSpeed: ${t.costSpeed}`,
+        `  Range: ${t.costRange}`,
+        `  BulletSpeed: ${t.costBullet}`,
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], x, y + i * 20);
+    }
+
+    ctx.restore();
+}
+
+
 function snapToGrid(v) {
     return Math.round(v / GRID) * GRID;
 }
@@ -613,11 +661,13 @@ function selectTower(id) {
 
     selectedTowerId = id;
     showUpgradeUI(true);
+    updateUpgradeUI();
 }
 
 function clearSelection() {
     selectedTowerId = null;
     showUpgradeUI(false);
+    updateUpgradeUI();
 }
 
 function pointInTower(wx, wy, tower) {
@@ -671,6 +721,12 @@ function addTowerAtGridPoint(gx, gy) {
         range: range_radius,     // 기본 300 :contentReference[oaicite:4]{index=4}
         fireEvery: tower_fire_every, // 기본 1초 :contentReference[oaicite:5]{index=5}
         dmg: 1,                  // 총알 데미지(기본 1)
+        bulletSpeed: bullet_speed, // 총알 속도
+
+        costDmg: 20,
+        costSpeed: 25,
+        costRange: 30,
+        costBullet: 35,
     };
 
     towers.push(t);
@@ -776,6 +832,7 @@ function fireBulletFromTower(t) {
         dx: dx / len, dy: dy / len,
         traveled: 0,
         dmg: t.dmg,          // 타워별 데미지
+        speed: t.bulletSpeed,
     });
 }
 
@@ -820,13 +877,13 @@ function updateBullets(dt) {
         b.py = b.y;
 
         // 이동
-        const step = bullet_speed * dt;
+        const step = b.speed * dt;
         b.x += b.dx * step;
         b.y += b.dy * step;
         b.traveled += step;
 
         // 최대 사거리
-        if (b.traveled >= range_radius) {
+        if (b.traveled >= b.range) {
             deadBullets.add(b.id);
             continue;
         }
@@ -837,7 +894,7 @@ function updateBullets(dt) {
 
             const hit = segmentHitsCircle(b.px, b.py, b.x, b.y, e.x, e.y, ENEMY_RADIUS);
             if (hit) {
-                e.hp -= 1;
+                e.hp -= b.dmg;
                 deadBullets.add(b.id);
 
                 if (e.hp <= 0) {
@@ -870,6 +927,7 @@ function loop(now) {
     renderDragIndicator();
     renderPlayTime();
     renderToast();
+    renderSelectedTowerInfo();
     renderGameOver();
 
     requestAnimationFrame(loop);
@@ -943,6 +1001,86 @@ function updateEnemies(dt) {
     }
 }
 
+function canAfford(cost) {
+    return gold >= cost;
+}
+
+function pay(cost) {
+    gold -= cost;
+}
+
+function increaseCost(cost) {
+    return Math.round(cost * 1.1);
+}
+
+function upgradeDamage(btn) {
+    const t = getSelectedTower();
+    if (!t) return; // 타워 선택 안 된 상태면 무시(원하면 토스트도 가능)
+
+    if (gold < t.costDmg) {
+        toastAtButton(btn);
+        return;
+    }
+
+    gold -= t.costDmg;
+    t.dmg += 1;
+
+    t.costDmg = increaseCost(t.costDmg);
+    updateUpgradeUI();
+}
+
+function upgradeFireSpeed(btn) {
+    const t = getSelectedTower();
+    if (!t) return;
+
+    if (gold < t.costSpeed) {
+        toastAtButton(btn);
+        return;
+    }
+
+    gold -= t.costSpeed;
+    t.fireEvery = Math.max(0.1, t.fireEvery * 0.95); // 10% 빨라짐
+
+    t.costSpeed = increaseCost(t.costSpeed);
+    updateUpgradeUI();
+}
+
+function upgradeRange(btn) {
+    const t = getSelectedTower();
+    if (!t) return;
+
+    if (gold < t.costRange) {
+        toastAtButton(btn);
+        return;
+    }
+
+    gold -= t.costRange;
+    t.range += 25;
+
+    t.costRange = increaseCost(t.costRange);
+    spawn_min += 25;
+    spawn_max += 25;
+    
+    updateUpgradeUI();
+}
+
+function upgradeBulletSpeed(btn) {
+    const t = getSelectedTower();
+    if (!t) return;
+
+    if (gold < t.costBullet) {
+        toastAtButton(btn);
+        return;
+    }
+
+    gold -= t.costBullet;
+    t.bulletSpeed += 30;
+
+    t.costBullet = increaseCost(t.costBullet);
+    updateUpgradeUI();
+}
+
+
 function applyWave(w) {
     if (w > wave) {
         gold = Math.round(gold * 1.10); // ✅ 10% 증가, 정수 반올림
@@ -952,8 +1090,8 @@ function applyWave(w) {
 
     // 예시 규칙(원하면 바꿔줄게)
     enemy_hp = 1 + (w - 1);                 // 웨이브마다 HP +1
-    enemy_speed = 50 + (w - 1) * 5;            // 웨이브마다 속도 +2
-    spawnEvery = Math.max(0.6, 3.0 * Math.pow(0.9, (w - 1))); // 점점 빨라짐
+    enemy_speed = 50 + (w - 1) * 5;            // 웨이브마다 속도 +5
+    spawnEvery = Math.max(0.05, 3.0 * Math.pow(0.9, (w - 1))); // 점점 빨라짐
 }
 
 function renderGameOver() {
@@ -968,10 +1106,46 @@ function renderGameOver() {
     ctx.restore();
 }
 
+function updateUpgradeUI() {
+    const t = getSelectedTower();
+    const b1 = document.querySelector('.upg-btn[data-upg="1"]');
+    const b2 = document.querySelector('.upg-btn[data-upg="2"]');
+    const b3 = document.querySelector('.upg-btn[data-upg="3"]');
+    const b4 = document.querySelector('.upg-btn[data-upg="4"]');
+
+    if (!b1) return;
+
+    if (!t) {
+        b1.textContent = "Damage";
+        b2.textContent = "FireSpeed";
+        b3.textContent = "Range";
+        b4.textContent = "BulletSpeed";
+        return;
+    }
+
+    b1.textContent = `Damage (${t.costDmg})`;
+    b2.textContent = `FireSpeed (${t.costSpeed})`;
+    b3.textContent = `Range (${t.costRange})`;
+    b4.textContent = `BulletSpeed (${t.costBullet})`;
+}
+
+function toastAtButton(btn, text = "not enough gold") {
+    const r = btn.getBoundingClientRect();
+    // 캔버스 기준 좌표로 변환(캔버스가 화면 어디에 있는지 반영)
+    const c = canvas.getBoundingClientRect();
+    const sx = (r.left + r.right) / 2 - c.left;
+    const sy = r.top - c.top; // 버튼 위쪽에 뜨게
+
+    showToast(text, sx, sy);
+}
+
 document.querySelectorAll(".upg-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-        const id = btn.dataset.upg;
-        console.log("Upgrade clicked:", id);
-        // TODO: 업그레이드 로직 연결
+        const type = btn.dataset.upg;
+
+        if (type === "1") upgradeDamage(btn);
+        else if (type === "2") upgradeFireSpeed(btn);
+        else if (type === "3") upgradeRange(btn);
+        else if (type === "4") upgradeBulletSpeed(btn);
     });
 });
