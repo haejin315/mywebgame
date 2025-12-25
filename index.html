@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web Canvas Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="layout">
+    <aside class="ad left">LEFT AD</aside>
+
+    <main id="game-container">
+      <canvas id="game"></canvas>
+
+      <!-- Start 버튼 오버레이 -->
+      <div id="start-overlay">
+        <button id="start-btn">START</button>
+      </div>
+      
+      <!-- ✅ 업그레이드 UI (처음엔 숨김) -->
+      <div id="upgrade-ui" class="hidden">
+          <button class="upg-btn" data-upg="1">Upgrade 1</button>
+          <button class="upg-btn" data-upg="2">Upgrade 2</button>
+          <button class="upg-btn" data-upg="3">Upgrade 3</button>
+          <button class="upg-btn" data-upg="4">Upgrade 4</button>
+      </div>
+    </main>
+
+    <aside class="ad right">RIGHT AD</aside>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
