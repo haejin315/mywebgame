@@ -99,8 +99,11 @@ const BULLET_LEN = 30;       // 레이저 선 길이(연출용)
 const BULLET_WIDTH = 2;      // 바늘처럼 얇게
 let tower_cost = 10;
 let toast = null;
-
 let tower_fire_every = 1; // 초당 1발 정도
+
+const MAX_FIRE_EVERY = 0.01;   // 공격속도 최소
+const MAX_BULLET_SPEED = 1500;
+const MAX_RANGE = 10000;
 
 let bullets = [];            // {id, x, y, px, py, dx, dy, traveled}
 let nextBulletId = 1;
@@ -112,7 +115,7 @@ let upgradeCostSpeed = 25;
 let upgradeCostRange = 30;
 let upgradeCostBullet = 35;
 
-let gameSpeed = 4.0; // 1배속
+let gameSpeed = 1.0; // 1배속
 
 let gameOver = false;
 
@@ -899,7 +902,7 @@ function updateBullets(dt) {
 
                 if (e.hp <= 0) {
                     deadEnemies.add(e.id);
-                    gold += wave; // ✅ 적 처치 보상: 웨이브만큼
+                    gold += killRewardGold();
                 }
                 break;
             }
@@ -1001,6 +1004,11 @@ function updateEnemies(dt) {
     }
 }
 
+function killRewardGold() {
+    const mult = 1 + 0.02 * towers.length;
+    return Math.round(wave * mult);
+}
+
 function canAfford(cost) {
     return gold >= cost;
 }
@@ -1033,13 +1041,15 @@ function upgradeFireSpeed(btn) {
     const t = getSelectedTower();
     if (!t) return;
 
+    if (t.fireEvery <= MAX_FIRE_EVERY) return;
+
     if (gold < t.costSpeed) {
         toastAtButton(btn);
         return;
     }
 
     gold -= t.costSpeed;
-    t.fireEvery = Math.max(0.1, t.fireEvery * 0.95); // 10% 빨라짐
+    t.fireEvery = Math.max(0.01, t.fireEvery * 0.96); // 10% 빨라짐
 
     t.costSpeed = increaseCost(t.costSpeed);
     updateUpgradeUI();
@@ -1048,6 +1058,8 @@ function upgradeFireSpeed(btn) {
 function upgradeRange(btn) {
     const t = getSelectedTower();
     if (!t) return;
+
+    if (t.range >= MAX_RANGE) return;
 
     if (gold < t.costRange) {
         toastAtButton(btn);
@@ -1060,13 +1072,15 @@ function upgradeRange(btn) {
     t.costRange = increaseCost(t.costRange);
     spawn_min += 25;
     spawn_max += 25;
-    
+
     updateUpgradeUI();
 }
 
 function upgradeBulletSpeed(btn) {
     const t = getSelectedTower();
     if (!t) return;
+
+    if (t.bulletSpeed >= MAX_BULLET_SPEED) return;
 
     if (gold < t.costBullet) {
         toastAtButton(btn);
@@ -1127,6 +1141,12 @@ function updateUpgradeUI() {
     b2.textContent = `FireSpeed (${t.costSpeed})`;
     b3.textContent = `Range (${t.costRange})`;
     b4.textContent = `BulletSpeed (${t.costBullet})`;
+
+    // ✅ MAX 도달 시 버튼 비활성화
+    b2.disabled = t.fireEvery <= MAX_FIRE_EVERY;
+    b3.disabled = t.range >= MAX_RANGE;
+    b4.disabled = t.bulletSpeed >= MAX_BULLET_SPEED;
+    b1.disabled = false;
 }
 
 function toastAtButton(btn, text = "not enough gold") {
@@ -1148,4 +1168,16 @@ document.querySelectorAll(".upg-btn").forEach((btn) => {
         else if (type === "3") upgradeRange(btn);
         else if (type === "4") upgradeBulletSpeed(btn);
     });
+});
+
+const speedBtn = document.getElementById("speedToggle");
+function updateSpeedBtn() {
+    speedBtn.textContent = `x${gameSpeed}`;
+}
+updateSpeedBtn();
+
+speedBtn.addEventListener("click", () => {
+    gameSpeed += 1;
+    if (gameSpeed > 5) gameSpeed = 1;
+    updateSpeedBtn();
 });
